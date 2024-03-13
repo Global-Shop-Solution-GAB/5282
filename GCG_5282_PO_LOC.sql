@@ -1,0 +1,1 @@
+CREATE TABLE "GCG_5282_PO_Loc"( "PO" CHAR(7), "Loc" CHAR(2));
