@@ -1,0 +1,166 @@
+Program.Sub.ScreenSU.Start
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'BN, Nov 13, 2018
+'This program will add a textbox for Location and a button for Location browser at the PO header.
+'If the Location is set at the PO header, when user is at PO Line, the program will restrict user from adding/modifying lines having location different to location set at the header.
+
+'Customer: PBE LLC
+'Purchasing > File > Purchase Orders (Manual) > Open/New
+
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.sRet.Declare
+	v.Local.sSQL.Declare	
+	
+	F.Intrinsic.Control.SelectCase(v.Caller.Hook)
+		'Populate hook
+		F.Intrinsic.Control.Case(16850)
+			f.Intrinsic.Control.CallSub("Activate_Hidden_Controls")
+		'PO Change hook
+		f.Intrinsic.Control.Case(16855)	
+			f.ODBC.Connection!conx.OpenCompanyConnection
+				f.Intrinsic.Control.CallSub("Set_PO_Loc")
+			f.ODBC.Connection!conx.Close
+		'Post Save button hook
+		f.Intrinsic.Control.Case(16880)
+			f.ODBC.Connection!conx.OpenCompanyConnection
+				f.Intrinsic.Control.CallSub("Save_PO_Loc")
+			f.ODBC.Connection!conx.Close
+		'Custom Loc browser button hook
+		f.Intrinsic.Control.Case(16906)		
+			f.ODBC.Connection!conx.OpenCompanyConnection
+				Function.Intrinsic.UI.SetBrowserHotTypeAhead(true)
+				Function.Intrinsic.UI.Browser("Location","conx","select SEQ AS Seq, LOCN AS Loc, NAME AS Name, CITY AS City, STATE AS State from PO_MULTI_SHIP ORDER BY Seq","Seq*!*Loc*!*Name*!*City*!*State","700*!*700*!*1000*!*1000*!*1000",v.Local.sRet)		
+				'Check if you choose any record from the result
+				Function.Intrinsic.Control.If(Variable.Local.sRet.IsCancel,"=",False)
+					f.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+					v.Passed.GAB-TEXT-1.Set(v.Local.sRet(1))					
+				Function.Intrinsic.Control.EndIf			
+		'Pre-Save hook at Add/Modify a line
+		f.Intrinsic.Control.Case(17060)
+			f.ODBC.Connection!conx.OpenCompanyConnection
+				f.Intrinsic.String.Build("Select PO,Loc from GCG_5282_PO_LOC where PO = '{0}'",Variable.Passed.008002,v.Local.sSQL)
+				f.ODBC.Connection!conx.ExecuteAndReturn(v.Local.sSQL,v.Local.sRet)
+				f.Intrinsic.Control.If(v.Local.sRet,=,"")
+					f.Intrinsic.UI.Msgbox("Please set PO location at header. Saving cancelled")
+					v.Passed.777777.Set(1)
+				f.Intrinsic.Control.Else
+					f.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+					f.Intrinsic.Control.If(v.Local.sRet.UBound,>,0)
+						f.Intrinsic.Control.If(v.Local.sRet(1),<>,Variable.Passed.000011)
+							f.Intrinsic.UI.Msgbox("Part Location is different to Location set at PO header. Saving cancelled")
+							v.Passed.777777.Set(1)
+						f.Intrinsic.Control.EndIf
+					f.Intrinsic.Control.EndIf				
+				f.Intrinsic.Control.EndIf
+			f.ODBC.Connection!conx.Close			
+	F.Intrinsic.Control.EndSelect
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}GAB Version: {5}}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry
+
+Program.Sub.Main.End
+
+Program.Sub.Activate_Hidden_Controls.Start
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	
+	'GAB-BTN-1 below Part texbox
+	f.Intrinsic.Variable.SetProperty("GAB-BTN-1","PL",709)
+	F.Intrinsic.Variable.SetProperty("GAB-BTN-1","PT",426)
+	F.Intrinsic.Variable.SetProperty("GAB-BTN-1","PW",30)
+	f.Intrinsic.UI.ChangeCallerProperty(v.Passed.GAB-BTN-1,"HIDE",0)
+	F.Intrinsic.UI.ChangeCallerProperty(V.Passed.GAB-BTN-1,"LOCK",0)
+	Variable.Passed.GAB-BTN-1.Set("Loc")
+	
+	'Textbox 1
+	'Set horizontal position
+	f.Intrinsic.Variable.SetProperty("GAB-TEXT-1","PL",679)
+	'Set vertical position
+	F.Intrinsic.Variable.SetProperty("GAB-TEXT-1","PT",429)	
+	F.Intrinsic.Variable.SetProperty("GAB-TEXT-1","PW",25)
+	f.Intrinsic.UI.ChangeCallerProperty(v.Passed.GAB-TEXT-1,"HIDE",0)
+	F.Intrinsic.UI.ChangeCallerProperty(V.Passed.GAB-TEXT-1,"LOCK",0)
+
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")	
+F.Intrinsic.Control.EndTry
+
+Program.Sub.Activate_Hidden_Controls.End
+
+Program.Sub.Set_PO_Loc.Start
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.sPO.Declare
+	v.Local.sSQL.Declare
+	v.Local.sRet.Declare
+	
+	'Retrieve from GCG_5282_PO_Loc and set to GAB-TEXT-1
+	f.Intrinsic.String.LPad(Variable.Passed.000008,"0",7,v.Local.sPO)
+	f.Intrinsic.String.Build("Select PO,Loc from GCG_5282_PO_LOC where PO = '{0}'",v.Local.sPO,v.Local.sSQL)
+	f.ODBC.Connection!conx.ExecuteAndReturn(v.Local.sSQL,v.Local.sRet)
+	f.Intrinsic.Control.If(v.Local.sRet,<>,"")
+		f.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+		v.Passed.GAB-TEXT-1.Set(v.Local.sRet(1))
+	f.Intrinsic.Control.Else
+		v.Passed.GAB-TEXT-1.Set("")
+	f.Intrinsic.Control.EndIf	
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}GAB Version: {5}}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry
+Program.Sub.Set_PO_Loc.End
+
+Program.Sub.Save_PO_Loc.Start
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.sSQL.Declare
+	v.Local.sRet.Declare
+	v.Local.sPO.Declare
+
+	f.Intrinsic.String.LPad(Variable.Passed.000008,"0",7,v.Local.sPO)
+	'Save to GCG_5282_PO_Loc
+	f.Intrinsic.String.Build("Select PO,Loc from GCG_5282_PO_LOC where PO = '{0}'",v.Local.sPO,v.Local.sSql)		
+	f.ODBC.Connection!conx.ExecuteAndReturn(v.Local.sSQL,v.Local.sRet)
+	f.Intrinsic.Control.If(v.Local.sRet,=,"")
+		f.Intrinsic.String.Build("Insert into GCG_5282_PO_LOC (PO,LOC) values ('{0}','{1}')",v.Local.sPO,v.Passed.GAB-TEXT-1.Trim,v.Local.sSql)		
+	f.Intrinsic.Control.Else
+		f.Intrinsic.String.Build("Update GCG_5282_PO_LOC set Loc = '{1}' where PO = '{0}'",v.Local.sPO,v.Passed.GAB-TEXT-1.Trim,v.Local.sSql)
+	f.Intrinsic.Control.EndIf
+	f.ODBC.Connection!conx.Execute(v.Local.sSQL)
+	
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry
+Program.Sub.Save_PO_Loc.End
+
+Program.Sub.UnLoad.Start
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+
+	F.Intrinsic.Control.If(V.ODBC.conx.State,=,1)
+		F.ODBC.Connection!conx.close
+	F.Intrinsic.Control.EndIf
+	
+	f.Intrinsic.Control.End
+
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End	
+F.Intrinsic.Control.EndTry
+Program.Sub.UnLoad.End
